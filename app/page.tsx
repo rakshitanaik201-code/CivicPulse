@@ -1,23 +1,11 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Home,
-  MapPin,
-  FileText,
-  Trophy,
-  User,
-  Plus,
-  CheckCircle2,
-  Clock,
-  Menu,
-  X,
-  Bell,
-  ArrowUpRight,
-  LogOut,
+  Home, MapPin, FileText, Trophy, User, Plus,
+  CheckCircle2, Clock, Menu, X, Bell, ArrowUpRight, LogOut,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 
@@ -45,6 +33,7 @@ export default function HomePage() {
   const [user, setUser] = useState<any>(null);
   const [displayName, setDisplayName] = useState("Citizen");
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [checkingRole, setCheckingRole] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [complaints, setComplaints] = useState<Complaint[]>([]);
@@ -55,6 +44,7 @@ export default function HomePage() {
   const [complaintError, setComplaintError] = useState("");
   const [pointsError, setPointsError] = useState("");
 
+  // Check logged-in user
   useEffect(() => {
     async function checkUser() {
       const { data } = await supabase.auth.getUser();
@@ -74,6 +64,55 @@ export default function HomePage() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Redirect according to the user's role
+  useEffect(() => {
+    let active = true;
+
+    async function checkRole() {
+      if (!user?.id) {
+        setCheckingRole(false);
+        return;
+      }
+
+      setCheckingRole(true);
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!active) return;
+
+      if (error) {
+        console.error("Role check failed:", error.message);
+        setCheckingRole(false);
+        return;
+      }
+
+      if (data?.role === "worker") {
+        router.replace("/worker");
+        return;
+      }
+
+      if (data?.role === "official") {
+        router.replace("/official");
+        return;
+      }
+
+      setCheckingRole(false);
+    }
+
+    if (!checkingAuth) {
+      checkRole();
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id, checkingAuth, router]);
+
+  // Fetch citizen dashboard data
   useEffect(() => {
     async function fetchDashboardData() {
       if (!user?.id) return;
@@ -93,9 +132,7 @@ export default function HomePage() {
 
           supabase
             .from("complaints")
-            .select(
-              "id, complaint_code, title, location, status, created_at"
-            )
+            .select("id, complaint_code, title, location, status, created_at")
             .eq("citizen_id", user.id)
             .order("created_at", { ascending: false }),
 
@@ -128,7 +165,6 @@ export default function HomePage() {
           (sum, item) => sum + Number(item.points || 0),
           0
         );
-
         setPoints(totalPoints);
       }
 
@@ -164,18 +200,12 @@ export default function HomePage() {
 
   function getStatusStyle(status: string) {
     switch (status) {
-      case "Resolved":
-        return "bg-green-100 text-green-800";
-      case "In Progress":
-        return "bg-amber-100 text-amber-800";
-      case "Assigned":
-        return "bg-purple-100 text-purple-800";
-      case "Reviewed":
-        return "bg-blue-100 text-blue-800";
-      case "Rejected":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-700";
+      case "Resolved": return "bg-green-100 text-green-800";
+      case "In Progress": return "bg-amber-100 text-amber-800";
+      case "Assigned": return "bg-purple-100 text-purple-800";
+      case "Reviewed": return "bg-blue-100 text-blue-800";
+      case "Rejected": return "bg-red-100 text-red-800";
+      default: return "bg-gray-100 text-gray-700";
     }
   }
 
@@ -192,7 +222,7 @@ export default function HomePage() {
     });
   }
 
-  if (checkingAuth) {
+  if (checkingAuth || (user && checkingRole)) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-[#F7FAF7]">
         <p className="text-[#173D35] font-semibold">
@@ -213,10 +243,7 @@ export default function HomePage() {
           <h1 className="mt-5 text-3xl font-bold text-[#173D35]">
             CivicPulse
           </h1>
-
-          <p className="mt-2 text-gray-500">
-            Your city. Your voice.
-          </p>
+          <p className="mt-2 text-gray-500">Your city. Your voice.</p>
 
           <h2 className="mt-8 text-2xl font-bold text-[#203B34]">
             Make your city better!
@@ -243,26 +270,10 @@ export default function HomePage() {
   }
 
   const stats = [
-    {
-      label: "Issues Reported",
-      value: loadingComplaints ? "..." : totalComplaints,
-      icon: FileText,
-    },
-    {
-      label: "Issues Resolved",
-      value: loadingComplaints ? "..." : resolvedComplaints,
-      icon: CheckCircle2,
-    },
-    {
-      label: "In Progress",
-      value: loadingComplaints ? "..." : inProgressComplaints,
-      icon: Clock,
-    },
-    {
-      label: "Civic Points",
-      value: loadingPoints ? "..." : points,
-      icon: Trophy,
-    },
+    { label: "Issues Reported", value: loadingComplaints ? "..." : totalComplaints, icon: FileText },
+    { label: "Issues Resolved", value: loadingComplaints ? "..." : resolvedComplaints, icon: CheckCircle2 },
+    { label: "In Progress", value: loadingComplaints ? "..." : inProgressComplaints, icon: Clock },
+    { label: "Civic Points", value: loadingPoints ? "..." : points, icon: Trophy },
   ];
 
   return (
@@ -285,7 +296,6 @@ export default function HomePage() {
         <nav className="space-y-2">
           {navigation.map((item) => {
             const Icon = item.icon;
-
             return (
               <Link
                 key={item.label}
@@ -335,9 +345,7 @@ export default function HomePage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="hidden text-sm sm:block">
-              {displayName}
-            </span>
+            <span className="hidden text-sm sm:block">{displayName}</span>
 
             <button
               type="button"
@@ -363,11 +371,9 @@ export default function HomePage() {
             <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
               Main Menu
             </p>
-
             <nav className="space-y-2">
               {navigation.map((item) => {
                 const Icon = item.icon;
-
                 return (
                   <Link
                     key={item.label}
@@ -402,11 +408,9 @@ export default function HomePage() {
                   year: "numeric",
                 })}
               </p>
-
               <h2 className="mt-2 text-2xl font-bold md:text-3xl">
                 Welcome back, {displayName}! 👋
               </h2>
-
               <p className="mt-2 text-sm text-gray-500">
                 Ready to make your neighbourhood better?
               </p>
@@ -424,19 +428,15 @@ export default function HomePage() {
           <section className="grid grid-cols-2 gap-4 xl:grid-cols-4">
             {stats.map((stat) => {
               const Icon = stat.icon;
-
               return (
                 <div
                   key={stat.label}
                   className="rounded-2xl border border-[#E7EEE8] bg-white p-5 shadow-sm"
                 >
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-gray-500 sm:text-sm">
-                      {stat.label}
-                    </p>
+                    <p className="text-xs text-gray-500 sm:text-sm">{stat.label}</p>
                     <Icon size={20} className="text-[#477A65]" />
                   </div>
-
                   <p className="mt-4 text-3xl font-bold">{stat.value}</p>
                 </div>
               );
@@ -452,7 +452,6 @@ export default function HomePage() {
                     Track your reported civic issues
                   </p>
                 </div>
-
                 <Link
                   href="/complaints"
                   className="flex items-center gap-1 text-sm font-semibold text-[#477A65]"
@@ -502,11 +501,9 @@ export default function HomePage() {
                           {getStatusLabel(complaint.status)}
                         </span>
                       </div>
-
                       <p className="mt-2 flex items-center gap-1 text-xs text-gray-500">
                         <MapPin size={13} /> {complaint.location}
                       </p>
-
                       <div className="mt-3 flex justify-between text-xs text-gray-400">
                         <span>{complaint.complaint_code}</span>
                         <span>{formatDate(complaint.created_at)}</span>
@@ -521,9 +518,7 @@ export default function HomePage() {
               <div className="rounded-2xl bg-[#173D35] p-6 text-white shadow-sm">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-[#D6F4DF]">
-                      Your Civic Impact
-                    </p>
+                    <p className="text-sm text-[#D6F4DF]">Your Civic Impact</p>
                     <h3 className="mt-2 text-2xl font-bold">
                       {loadingPoints ? "Loading..." : civicLevel}
                     </h3>
@@ -577,7 +572,6 @@ export default function HomePage() {
                 <p className="mt-1 text-xs text-gray-500">
                   Every genuine contribution counts.
                 </p>
-
                 <div className="mt-4 space-y-3">
                   {[
                     ["Report a valid issue", "+5 pts"],
@@ -590,9 +584,7 @@ export default function HomePage() {
                       className="flex justify-between gap-2 text-sm"
                     >
                       <span className="text-gray-600">{action}</span>
-                      <span className="font-semibold text-[#477A65]">
-                        {value}
-                      </span>
+                      <span className="font-semibold text-[#477A65]">{value}</span>
                     </div>
                   ))}
                 </div>
@@ -603,14 +595,11 @@ export default function HomePage() {
           <section className="rounded-2xl border border-[#E7EEE8] bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-lg font-bold">
-                  Nearby Community Issues
-                </h3>
+                <h3 className="text-lg font-bold">Nearby Community Issues</h3>
                 <p className="mt-1 text-sm text-gray-500">
                   Stay aware of what's happening around your neighbourhood.
                 </p>
               </div>
-
               <Link
                 href="/community"
                 className="text-sm font-semibold text-[#477A65]"
