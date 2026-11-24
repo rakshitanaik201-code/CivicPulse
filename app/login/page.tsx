@@ -7,6 +7,8 @@ import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
+type Role = "citizen" | "official" | "worker";
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -16,6 +18,7 @@ export default function LoginPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [selectedRole, setSelectedRole] = useState<Role>("citizen");
 
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
@@ -62,14 +65,39 @@ export default function LoginPage() {
           );
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
 
         if (error) throw error;
 
-        router.push("/");
+        // Verify the actual role stored in Supabase
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", data.user.id)
+          .maybeSingle();
+
+        if (profileError || !profile) {
+          await supabase.auth.signOut();
+          throw new Error("Unable to verify your account role. Please contact an administrator.");
+        }
+
+        if (profile.role !== selectedRole) {
+          await supabase.auth.signOut();
+          throw new Error(
+            `This account is registered as ${profile.role}. Please select the correct role.`
+          );
+        }
+
+        const dashboardRoutes: Record<Role, string> = {
+          citizen: "/",
+          official: "/official",
+          worker: "/worker",
+        };
+
+        router.push(dashboardRoutes[selectedRole]);
         router.refresh();
       }
     } catch (error) {
@@ -82,6 +110,12 @@ export default function LoginPage() {
       setLoading(false);
     }
   }
+
+  const roles: { value: Role; label: string; icon: string }[] = [
+    { value: "citizen", label: "Citizen", icon: "👤" },
+    { value: "official", label: "Official", icon: "🏛️" },
+    { value: "worker", label: "Worker", icon: "🦺" },
+  ];
 
   return (
     <main className="min-h-screen bg-[#F7FAF7] flex items-center justify-center p-5">
@@ -125,6 +159,40 @@ export default function LoginPage() {
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+
+          {/* Role Selection */}
+          {!isSignup && !isForgotPassword && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-3">
+                Login As
+              </label>
+
+              <div className="grid grid-cols-3 gap-2">
+                {roles.map((role) => (
+                  <button
+                    key={role.value}
+                    type="button"
+                    onClick={() => {
+                      setSelectedRole(role.value);
+                      setMessage("");
+                    }}
+                    className={`border rounded-xl p-3 text-center transition ${
+                      selectedRole === role.value
+                        ? "border-[#173D35] bg-[#D6F4DF] text-[#173D35] ring-1 ring-[#173D35]"
+                        : "border-gray-200 text-gray-600 hover:border-[#55766A]"
+                    }`}
+                  >
+                    <span className="block text-2xl mb-1">
+                      {role.icon}
+                    </span>
+                    <span className="text-sm font-semibold">
+                      {role.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {isSignup && !isForgotPassword && (
             <div>
